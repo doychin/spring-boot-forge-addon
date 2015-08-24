@@ -1,6 +1,10 @@
 package org.jboss.forge.addon.springboot.ui;
 
 import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.Serializable;
+import java.net.URLClassLoader;
+import java.util.List;
 
 import javax.inject.Inject;
 import javax.persistence.EmbeddedId;
@@ -8,20 +12,22 @@ import javax.persistence.Entity;
 import javax.persistence.Id;
 import javax.persistence.IdClass;
 
+import org.jboss.forge.addon.facets.FacetNotFoundException;
 import org.jboss.forge.addon.facets.constraints.FacetConstraint;
+import org.jboss.forge.addon.javaee.jpa.PersistenceOperations;
 import org.jboss.forge.addon.parser.java.facets.JavaSourceFacet;
 import org.jboss.forge.addon.parser.java.resources.JavaResource;
 import org.jboss.forge.addon.parser.java.ui.AbstractJavaSourceCommand;
 import org.jboss.forge.addon.projects.Project;
 import org.jboss.forge.addon.projects.ProjectFactory;
+import org.jboss.forge.addon.projects.facets.ClassLoaderFacet;
+import org.jboss.forge.addon.resource.FileResource;
 import org.jboss.forge.addon.springboot.facet.SpringBootJPAFacetImpl;
 import org.jboss.forge.addon.ui.context.UIBuilder;
 import org.jboss.forge.addon.ui.context.UIContext;
 import org.jboss.forge.addon.ui.context.UIExecutionContext;
+import org.jboss.forge.addon.ui.context.UISelection;
 import org.jboss.forge.addon.ui.context.UIValidationContext;
-import org.jboss.forge.addon.ui.facets.HintsFacet;
-import org.jboss.forge.addon.ui.hints.InputType;
-import org.jboss.forge.addon.ui.input.UIInput;
 import org.jboss.forge.addon.ui.input.UISelectOne;
 import org.jboss.forge.addon.ui.metadata.UICommandMetadata;
 import org.jboss.forge.addon.ui.metadata.WithAttributes;
@@ -30,6 +36,7 @@ import org.jboss.forge.addon.ui.result.Results;
 import org.jboss.forge.addon.ui.util.Categories;
 import org.jboss.forge.addon.ui.util.Metadata;
 import org.jboss.forge.roaster.model.Type;
+import org.jboss.forge.roaster.model.source.AnnotationSource;
 import org.jboss.forge.roaster.model.source.FieldSource;
 import org.jboss.forge.roaster.model.source.JavaClassSource;
 import org.jboss.forge.roaster.model.source.JavaInterfaceSource;
@@ -38,9 +45,11 @@ import org.jboss.forge.roaster.model.source.JavaInterfaceSource;
 public class SpringBootRepository extends
 		AbstractJavaSourceCommand<JavaInterfaceSource> {
 
+	public static final String DEFAULT_REPOSITORY_PACKAGE = ".repository";
+
 	@Inject
 	@WithAttributes(label = "Repository for entity", required = true)
-	private UIInput<JavaResource> repositoryEntity;
+	private UISelectOne<JavaResource> repositoryEntity;
 
 	@Inject
 	@WithAttributes(label = "Repository type", required = true)
@@ -60,14 +69,11 @@ public class SpringBootRepository extends
 		JavaSourceFacet javaSourceFacet = project
 				.getFacet(JavaSourceFacet.class);
 
-		repositoryEntity.getFacet(HintsFacet.class).setInputType(
-				InputType.JAVA_CLASS_PICKER);
-		Object selection = builder.getUIContext().getInitialSelection().get();
+		setupEntities(context);
 
 		String entityName = null;
 
-		if (selection instanceof JavaResource) {
-			repositoryEntity.setDefaultValue((JavaResource) selection);
+		if (repositoryEntity.getValue() != null) {
 			JavaClassSource entityClass = ((JavaResource) repositoryEntity
 					.getValue()).getJavaType();
 
@@ -87,7 +93,108 @@ public class SpringBootRepository extends
 		getTargetPackage().setDescription("Repository package name");
 
 		getTargetPackage().setDefaultValue(
-				javaSourceFacet.getBasePackage() + ".repository");
+				javaSourceFacet.getBasePackage() + DEFAULT_REPOSITORY_PACKAGE);
+	}
+
+	@Inject
+	private PersistenceOperations persistenceOperations;
+
+	private void setupEntities(UIContext context) {
+		UISelection<FileResource<?>> selection = context.getInitialSelection();
+		Project project = getSelectedProject(context);
+		final List<JavaResource> entities = persistenceOperations
+				.getProjectEntities(project);
+		repositoryEntity.setValueChoices(entities);
+		int idx = -1;
+		if (!selection.isEmpty()) {
+			idx = entities.indexOf(selection.get());
+		}
+		if (idx != -1) {
+			repositoryEntity.setDefaultValue(entities.get(idx));
+		}
+	}
+
+	private String detectEntityPrimaryKeyType(Project project,
+			JavaClassSource entityClass) throws FacetNotFoundException,
+			IOException, ClassNotFoundException {
+		entityPkQualifiedName = null;
+		simplePkName = null;
+		if (entityClass.hasAnnotation(IdClass.class)) {
+			AnnotationSource<JavaClassSource> annotation = entityClass
+					.getAnnotation(IdClass.class);
+
+			entityPkQualifiedName = annotation.getLiteralValue();
+
+			String path = entityPkQualifiedName.replaceAll("\\.", "/");
+			JavaSourceFacet sourceFacet = project
+					.getFacet(JavaSourceFacet.class);
+			String typeName = entityPkQualifiedName;
+			while (path != null) {
+				JavaResource jresource = sourceFacet.getJavaResource(path);
+				if (jresource != null) {
+					JavaClassSource csj = jresource.getJavaType();
+					if (csj.hasInterface(Serializable.class)) {
+						return null;
+					}
+
+					path = csj.getSuperType().replaceAll("\\.", "/");
+				} else {
+					path = null;
+					try (URLClassLoader cl = project.getFacet(
+							ClassLoaderFacet.class).getClassLoader()) {
+						Class<?> typeClas = cl.loadClass(typeName);
+						if (checkForSerializable(typeClas)) {
+							return null;
+						}
+					}
+				}
+			}
+			return "Primary key type must implement Serializable!";
+		} else {
+			for (FieldSource<JavaClassSource> field : entityClass.getFields()) {
+				if (field.hasAnnotation(Id.class)
+						|| field.hasAnnotation(EmbeddedId.class)) {
+					Type<JavaClassSource> fieldType = field.getType();
+
+					if (fieldType.isPrimitive()) {
+						return "Primitive type for primary key is not supported!";
+					}
+
+					entityPkQualifiedName = fieldType.getQualifiedName();
+					simplePkName = fieldType.getSimpleName();
+					
+					if (fieldType.isType(Serializable.class)) {
+						return null;
+					}
+
+					try (URLClassLoader cl = project.getFacet(
+							ClassLoaderFacet.class).getClassLoader()) {
+						if (checkForSerializable(cl
+								.loadClass(entityPkQualifiedName))) {
+							return null;
+						}
+					}
+
+					return "Primary key type must implement Serializable!";
+				}
+			}
+		}
+
+		return null;
+	}
+
+	private boolean checkForSerializable(Class<?> pkClass)
+			throws ClassNotFoundException {
+		while (pkClass != null) {
+			for (Class<?> intf : pkClass.getInterfaces()) {
+				if (intf.isAssignableFrom(Serializable.class)) {
+					return true;
+				}
+			}
+			pkClass = pkClass.getSuperclass();
+		}
+
+		return false;
 	}
 
 	@Override
@@ -98,44 +205,37 @@ public class SpringBootRepository extends
 					.getJavaType().hasAnnotation(Entity.class)) {
 				validator.addValidationError(repositoryEntity,
 						"The selected class must be JPA entity");
+
+				return;
+			}
+
+			JavaClassSource entityClass = ((JavaResource) repositoryEntity
+					.getValue()).getJavaType();
+			String result = null;
+			try {
+				result = detectEntityPrimaryKeyType(
+						getSelectedProject(validator), entityClass);
+			} catch (Exception e) {
+				validator.addValidationError(repositoryEntity,
+						"Error while validating primary key field type");
+			}
+
+			if (result != null) {
+				validator.addValidationError(repositoryEntity, result);
 			}
 		} catch (FileNotFoundException e) {
-			validator.addValidationError(repositoryEntity,
-					"You must select existing JPA entity to audit");
+			validator
+					.addValidationError(repositoryEntity,
+							"You must select existing JPA entity to create repository for");
 		}
 	}
 
-	private String entytPkQualifiedName = null;
+	private String entityPkQualifiedName = null;
 	private String simplePkName = null;
 
 	@Override
 	public Result execute(UIExecutionContext context) throws Exception {
-		JavaClassSource entityClass = ((JavaResource) repositoryEntity
-				.getValue()).getJavaType();
-
-		entytPkQualifiedName = null;
-		simplePkName = null;
-		if (entityClass.hasAnnotation(IdClass.class)) {
-			// AnnotationSource<JavaClassSource> idClassAnotation = entityClass
-			// .getAnnotation(IdClass.class);
-			// String valueClassName = idClassAnotation.getLiteralValue();
-
-			Results.success("Entites with IdClass primary key are not supported!");
-		} else {
-			for (FieldSource<JavaClassSource> field : entityClass.getFields()) {
-				if (field.hasAnnotation(Id.class)
-						|| field.hasAnnotation(EmbeddedId.class)) {
-					Type<JavaClassSource> fieldType = field.getType();
-
-					entytPkQualifiedName = fieldType.getQualifiedName();
-					simplePkName = fieldType.getSimpleName();
-
-					break;
-				}
-			}
-		}
-
-		if (entytPkQualifiedName == null) {
+		if (entityPkQualifiedName == null) {
 			Results.fail("Unable to detect entity primary key class type!");
 		}
 
@@ -162,7 +262,10 @@ public class SpringBootRepository extends
 			break;
 		}
 
-		source.addImport(entytPkQualifiedName);
+		if (!entityPkQualifiedName.equals(simplePkName)) {
+			// Don't import int, long, double and other simple types
+			source.addImport(entityPkQualifiedName);
+		}
 		source.addImport(entityClass.getQualifiedName());
 
 		return super.decorateSource(context, project, source);
