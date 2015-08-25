@@ -1,44 +1,32 @@
 package org.jboss.forge.addon.springboot.ui;
 
 import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.not;
 import static org.jboss.forge.addon.javaee.JavaEEPackageConstants.DEFAULT_ENTITY_PACKAGE;
 import static org.jboss.forge.addon.springboot.ui.SpringBootRepository.DEFAULT_REPOSITORY_PACKAGE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import javax.inject.Inject;
-import javax.persistence.IdClass;
-import javax.persistence.Table;
 
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.junit.Arquillian;
-import org.jboss.forge.addon.facets.FacetFactory;
 import org.jboss.forge.addon.javaee.jpa.JPAFacet;
 import org.jboss.forge.addon.parser.java.facets.JavaSourceFacet;
 import org.jboss.forge.addon.parser.java.resources.JavaResource;
 import org.jboss.forge.addon.projects.Project;
-import org.jboss.forge.addon.projects.ProjectFactory;
 import org.jboss.forge.addon.shell.test.ShellTest;
-import org.jboss.forge.addon.springboot.facet.SpringBootFacet;
-import org.jboss.forge.addon.springboot.facet.SpringBootJPAFacetImpl;
 import org.jboss.forge.addon.ui.controller.CommandController;
 import org.jboss.forge.addon.ui.metadata.UICommandMetadata;
 import org.jboss.forge.addon.ui.result.Failed;
 import org.jboss.forge.addon.ui.result.Result;
 import org.jboss.forge.addon.ui.test.UITestHarness;
 import org.jboss.forge.arquillian.archive.AddonArchive;
-import org.jboss.forge.roaster.model.JavaClass;
 import org.jboss.forge.roaster.model.JavaInterface;
-import org.jboss.forge.roaster.model.JavaType;
-import org.jboss.forge.roaster.model.Type;
-import org.jboss.forge.roaster.model.source.AnnotationSource;
-import org.jboss.forge.roaster.model.source.JavaClassSource;
 import org.jboss.forge.roaster.model.source.JavaInterfaceSource;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.junit.Assert;
@@ -52,17 +40,13 @@ public class SpringBootRepositoryTest {
 	@Deployment
 	public static AddonArchive getDeployment() {
 		AddonArchive result = ShrinkWrap.create(AddonArchive.class)
-				.addBeansXML().addClass(ProjectHelper.class);
+				.addBeansXML().addClass(ProjectHelper.class)
+				.addClass(SpringBootRepository.class)
+				.addClass(SpringBootRepositoryType.class);
 		return result;
 	}
 
 	private Project project;
-
-	@Inject
-	ProjectFactory projectFactory;
-
-	@Inject
-	FacetFactory facetFactory;
 
 	@Inject
 	private UITestHarness uiTestHarness;
@@ -75,17 +59,15 @@ public class SpringBootRepositoryTest {
 
 	@Before
 	public void setUp() throws IOException {
-		project = projectFactory.createTempProject();
-
-		facetFactory.install(project, SpringBootFacet.class);
-		facetFactory.install(project, SpringBootJPAFacetImpl.class);
+		project = projectHelper.createSpringBootProject();
 
 		projectHelper.createJPAEntity(project, "Customer");
-		JavaResource entity = projectHelper.createJPAEntity(project,
-				"CustomerWithIdClass");
-		JavaClassSource source = entity.getJavaType();
-		AnnotationSource<JavaClassSource> annotation = source.addAnnotation(IdClass.class);
-		annotation.setAnnotationValue("");
+		// JavaResource entity = projectHelper.createJPAEntity(project,
+		// "CustomerWithIdClass");
+		// JavaClassSource source = entity.getJavaType();
+		// AnnotationSource<JavaClassSource> annotation = source
+		// .addAnnotation(IdClass.class);
+		// annotation.setAnnotationValue("");
 	}
 
 	@Test
@@ -180,9 +162,9 @@ public class SpringBootRepositoryTest {
 				"PagingAndSortingRepository<Customer, int>");
 	}
 
-	@Test
-	public void testIdClassPrimaryKey() throws Exception {
-		JavaResource entity = projectHelper
-				.createJPAEntity(project, "Customer");
-	}
+	// @Test
+	// public void testIdClassPrimaryKey() throws Exception {
+	// JavaResource entity = projectHelper
+	// .createJPAEntity(project, "Customer");
+	// }
 }
