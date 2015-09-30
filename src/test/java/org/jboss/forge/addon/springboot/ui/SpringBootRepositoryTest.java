@@ -20,11 +20,17 @@ import org.jboss.forge.addon.parser.java.facets.JavaSourceFacet;
 import org.jboss.forge.addon.parser.java.resources.JavaResource;
 import org.jboss.forge.addon.projects.Project;
 import org.jboss.forge.addon.shell.test.ShellTest;
+import org.jboss.forge.addon.springboot.descriptors.SpringBootDescriptor;
+import org.jboss.forge.addon.springboot.descriptors.SpringBootPropertiesDescriptor;
+import org.jboss.forge.addon.springboot.facet.SpringBootFacet;
+import org.jboss.forge.addon.springboot.facet.SpringBootJPAFacetImpl;
+import org.jboss.forge.addon.springboot.facet.SpringBootRestFacet;
 import org.jboss.forge.addon.ui.controller.CommandController;
 import org.jboss.forge.addon.ui.metadata.UICommandMetadata;
 import org.jboss.forge.addon.ui.result.Failed;
 import org.jboss.forge.addon.ui.result.Result;
 import org.jboss.forge.addon.ui.test.UITestHarness;
+import org.jboss.forge.arquillian.AddonDependencies;
 import org.jboss.forge.arquillian.archive.AddonArchive;
 import org.jboss.forge.roaster.model.JavaInterface;
 import org.jboss.forge.roaster.model.source.JavaInterfaceSource;
@@ -38,10 +44,19 @@ import org.junit.runner.RunWith;
 public class SpringBootRepositoryTest {
 
 	@Deployment
+	@AddonDependencies
 	public static AddonArchive getDeployment() {
 		AddonArchive result = ShrinkWrap.create(AddonArchive.class)
 				.addBeansXML().addClass(ProjectHelper.class)
 				.addClass(SpringBootRepository.class)
+				.addClass(SpringBootSetupCommand.class)
+				.addClass(SpringBootSetupJPACommand.class)
+				.addClass(SpringBootJPAFacetImpl.class)
+				.addClass(SpringBootRestFacet.class)
+				.addClass(SpringBootFacet.class)
+				.addClass(SpringBootDescriptor.class)
+				.addClass(SpringBootPropertiesDescriptor.class)
+				.addClass(SpringBootSetupRestCommand.class)
 				.addClass(SpringBootRepositoryType.class);
 		return result;
 	}
@@ -98,7 +113,7 @@ public class SpringBootRepositoryTest {
 				.getBasePackage();
 		String entityPackageName = baseBackageName + "."
 				+ DEFAULT_ENTITY_PACKAGE;
-		String repositoryPackageName = baseBackageName + "."
+		String repositoryPackageName = baseBackageName 
 				+ DEFAULT_REPOSITORY_PACKAGE;
 		shellTest.getShell().setCurrentResource(project.getRoot());
 		Result result = shellTest

@@ -22,7 +22,7 @@ import org.jboss.forge.addon.projects.Project;
 import org.jboss.forge.addon.projects.ProjectFactory;
 import org.jboss.forge.addon.projects.facets.ClassLoaderFacet;
 import org.jboss.forge.addon.resource.FileResource;
-import org.jboss.forge.addon.springboot.facet.SpringBootJPAFacetImpl;
+import org.jboss.forge.addon.springboot.facet.SpringBootRestFacet;
 import org.jboss.forge.addon.ui.context.UIBuilder;
 import org.jboss.forge.addon.ui.context.UIContext;
 import org.jboss.forge.addon.ui.context.UIExecutionContext;
@@ -40,8 +40,8 @@ import org.jboss.forge.roaster.model.source.AnnotationSource;
 import org.jboss.forge.roaster.model.source.FieldSource;
 import org.jboss.forge.roaster.model.source.JavaClassSource;
 import org.jboss.forge.roaster.model.source.JavaInterfaceSource;
-
-@FacetConstraint(SpringBootJPAFacetImpl.class)
+ 
+@FacetConstraint(SpringBootRestFacet.class)
 public class SpringBootRepository extends
 		AbstractJavaSourceCommand<JavaInterfaceSource> {
 

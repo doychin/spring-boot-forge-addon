@@ -10,11 +10,14 @@ import javax.persistence.GenerationType;
 import org.jboss.forge.addon.facets.FacetFactory;
 import org.jboss.forge.addon.javaee.jpa.PersistenceOperations;
 import org.jboss.forge.addon.parser.java.facets.JavaSourceFacet;
+import org.jboss.forge.addon.parser.java.projects.JavaWebProjectType;
 import org.jboss.forge.addon.parser.java.resources.JavaResource;
 import org.jboss.forge.addon.projects.Project;
 import org.jboss.forge.addon.projects.ProjectFactory;
 import org.jboss.forge.addon.springboot.facet.SpringBootFacet;
 import org.jboss.forge.addon.springboot.facet.SpringBootJPAFacetImpl;
+import org.jboss.forge.addon.springboot.facet.SpringBootRestFacet;
+import org.jboss.forge.addon.springboot.spring.SpringBootMetadataRetriever;
 
 public class ProjectHelper {
 
@@ -27,6 +30,12 @@ public class ProjectHelper {
 	@Inject
 	private ProjectFactory projectFactory;
 
+	@Inject
+	private SpringBootMetadataRetriever retriever;
+
+	@Inject
+	protected JavaWebProjectType javaWebProjectType;
+
 	public JavaResource createJPAEntity(Project project, String entityName)
 			throws IOException {
 		String packageName = project.getFacet(JavaSourceFacet.class)
@@ -36,10 +45,17 @@ public class ProjectHelper {
 	}
 
 	public Project createSpringBootProject() {
-		Project project = projectFactory.createTempProject();
+		Project project = projectFactory.createTempProject(javaWebProjectType
+				.getRequiredFacets());
+		retriever.setSelectedSpringBootVersion("1.2.5.RELEASE");
 
 		facetFactory.install(project, SpringBootFacet.class);
 		facetFactory.install(project, SpringBootJPAFacetImpl.class);
+		facetFactory.install(project, SpringBootRestFacet.class);
 		return project;
+	}
+	
+	public void addSpringRestFacet(Project project) {
+		facetFactory.install(project, SpringBootRestFacet.class);
 	}
 }
